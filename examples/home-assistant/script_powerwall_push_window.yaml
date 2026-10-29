@@ -1,0 +1,235 @@
+# Powerwall TOU control — reusable "push a forced window" script.
+#
+# ADAPT BEFORE USE:
+#   - Replace YOUR_POWERWALL_DEVICE_ID with your own Teslemetry device id
+#     (Settings -> Devices & Services -> Devices -> your Powerwall -> look
+#     at the URL). See docs/04-home-assistant-setup.md.
+#   - Replace every my_home_* / powerwall_* entity id below with your own
+#     (see the rename table in docs/04-home-assistant-setup.md).
+#   - Replace 'Your Supplier' / 'GBP' with your own supplier name/currency
+#     if you want the tariff calendar entities to read sensibly — the
+#     values don't have to be accurate for the trick itself to work.
+#
+# This merges the two working source automations (manual import and
+# manual export controllers) into one script, selected by `direction`.
+# See docs/02-anatomy-of-a-tariff.md for why the rates below are what
+# they are, and docs/05-lessons-learned.md for why the ordering and
+# delays below matter — don't reorder or shorten them without reading
+# that doc first.
+#
+# `hours` is the normal way to call this (used by the dashboard/booleans
+# in this examples/ directory). `minutes` is an optional override for
+# callers that know an exact window length (for example, an Octopus
+# session automation) rather than a round number of hours — if `minutes`
+# is given, it wins over `hours`.
+
+powerwall_push_window:
+  alias: "Powerwall: push force window"
+  description: >-
+    Pushes an isolated-spike TOU tariff to force the Powerwall to charge
+    from the grid or export to the grid for a chosen duration, then sets
+    grid charging / reserve / export rule / mode in the tariff-first,
+    mode-last order, waits 3 minutes, and nudges the gateway if nothing
+    happened yet.
+  fields:
+    direction:
+      name: Direction
+      description: "'charge' to force a grid charge, 'export' to force an export."
+      required: true
+      selector:
+        select:
+          options:
+            - charge
+            - export
+    hours:
+      name: Hours
+      description: How many hours to force for. Ignored if 'minutes' is given.
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 0.5
+          max: 6
+          step: 0.5
+          unit_of_measurement: h
+    minutes:
+      name: Minutes (optional override)
+      description: >-
+        Explicit duration in minutes. If set, this is used instead of
+        'hours' — handy when a caller already knows an exact window
+        length (e.g. the length of an Octopus session).
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 360
+          unit_of_measurement: min
+  sequence:
+    - variables:
+        duration_minutes: >-
+          {{ (minutes | float(60)) if (minutes is defined and minutes not in [none, ''])
+             else ((hours | default(1.0) | float) * 60) }}
+    - action: teslemetry.time_of_use
+      continue_on_error: true
+      data:
+        device_id: YOUR_POWERWALL_DEVICE_ID
+        tou_settings: |-
+          {% set now_dt = now() %}
+          {% set dur_min = duration_minutes | float %}
+          {% set start_dt = now_dt | as_local %}
+          {% set end_dt = (now_dt + timedelta(minutes=dur_min)) | as_local %}
+          {% set start_hour = start_dt.hour | int %}
+          {% set start_minute = start_dt.minute | int %}
+          {% set end_hour = end_dt.hour | int %}
+          {% set end_minute = end_dt.minute | int %}
+
+          {% if end_dt.day == start_dt.day %}
+            {% set window_periods = [
+              {'fromDayOfWeek': 0, 'fromHour': start_hour, 'fromMinute': start_minute, 'toDayOfWeek': 6, 'toHour': end_hour, 'toMinute': end_minute}
+            ] %}
+            {% set rest_periods = [
+              {'fromDayOfWeek': 0, 'fromHour': 0, 'fromMinute': 0, 'toDayOfWeek': 6, 'toHour': start_hour, 'toMinute': start_minute},
+              {'fromDayOfWeek': 0, 'fromHour': end_hour, 'fromMinute': end_minute, 'toDayOfWeek': 6, 'toHour': 0, 'toMinute': 0}
+            ] %}
+          {% else %}
+            {% set window_periods = [
+              {'fromDayOfWeek': 0, 'fromHour': start_hour, 'fromMinute': start_minute, 'toDayOfWeek': 6, 'toHour': 0, 'toMinute': 0},
+              {'fromDayOfWeek': 0, 'fromHour': 0, 'fromMinute': 0, 'toDayOfWeek': 6, 'toHour': end_hour, 'toMinute': end_minute}
+            ] %}
+            {% set rest_periods = [
+              {'fromDayOfWeek': 0, 'fromHour': end_hour, 'fromMinute': end_minute, 'toDayOfWeek': 6, 'toHour': start_hour, 'toMinute': start_minute}
+            ] %}
+          {% endif %}
+
+          {# Drop zero-length periods (e.g. 00:00-00:00 when a window starts
+             or ends exactly at midnight). #}
+          {% set ns = namespace(w=[], r=[]) %}
+          {% for p in window_periods if (p.fromHour, p.fromMinute) != (p.toHour, p.toMinute) %}
+            {% set ns.w = ns.w + [p] %}
+          {% endfor %}
+          {% for p in rest_periods if (p.fromHour, p.fromMinute) != (p.toHour, p.toMinute) %}
+            {% set ns.r = ns.r + [p] %}
+          {% endfor %}
+          {% set window_periods = ns.w %}
+          {% set rest_periods = ns.r %}
+
+          {# Charge: the window is the cheap (OFF_PEAK) period.
+             Export: the window is the lucrative-to-sell (ON_PEAK) period.
+             See docs/02-anatomy-of-a-tariff.md for why. #}
+          {% if direction == 'charge' %}
+            {% set off_peak_periods = window_periods %}
+            {% set on_peak_periods = rest_periods %}
+            {% set buy_rates = {'OFF_PEAK': 0.00, 'ON_PEAK': 1.50} %}
+            {% set sell_rates = {'OFF_PEAK': 0.00, 'ON_PEAK': 0.00} %}
+            {% set tariff_code = 'FORCE-CHARGE-ISOLATED-SPIKE' %}
+          {% else %}
+            {% set off_peak_periods = rest_periods %}
+            {% set on_peak_periods = window_periods %}
+            {% set buy_rates = {'OFF_PEAK': 0.07, 'ON_PEAK': 3.00} %}
+            {% set sell_rates = {'OFF_PEAK': 0.00, 'ON_PEAK': 2.90} %}
+            {% set tariff_code = 'FORCE-EXPORT-ISOLATED-SPIKE' %}
+          {% endif %}
+
+          {{ {
+            'break_even_cost_to_charge': 0,
+            'mode': 'time_of_use',
+            'tariff_content_v2': {
+              'code': tariff_code,
+              'currency': 'GBP',
+              'daily_charges': [{'amount': 0, 'name': 'Charge'}],
+              'demand_charges': {'ALL': {'rates': {'ALL': 0}}},
+              'energy_charges': {
+                'ALL': {'rates': {'ALL': 0}},
+                'AllYear': {'rates': buy_rates}
+              },
+              'name': 'Powerwall TOU Control - Force Window',
+              'seasons': {
+                'AllYear': {
+                  'fromDay': 1, 'fromMonth': 1, 'toDay': 31, 'toMonth': 12,
+                  'tou_periods': {
+                    'OFF_PEAK': {'periods': off_peak_periods},
+                    'ON_PEAK': {'periods': on_peak_periods}
+                  }
+                }
+              },
+              'sell_tariff': {
+                'currency': 'GBP',
+                'daily_charges': [{'amount': 0, 'name': 'Charge'}],
+                'demand_charges': {'ALL': {'rates': {'ALL': 0}}},
+                'energy_charges': {
+                  'ALL': {'rates': {'ALL': 0}},
+                  'AllYear': {'rates': sell_rates}
+                },
+                'name': 'Powerwall TOU Control - Force Window',
+                'seasons': {
+                  'AllYear': {
+                    'fromDay': 1, 'fromMonth': 1, 'toDay': 31, 'toMonth': 12,
+                    'tou_periods': {
+                      'OFF_PEAK': {'periods': off_peak_periods},
+                      'ON_PEAK': {'periods': on_peak_periods}
+                    }
+                  }
+                },
+                'utility': 'Your Supplier'
+              },
+              'utility': 'Your Supplier',
+              'version': 1
+            }
+          } }}
+    - delay:
+        seconds: 15
+    - action: switch.turn_on
+      continue_on_error: true
+      target:
+        entity_id: switch.my_home_allow_charging_from_grid
+    - action: number.set_value
+      continue_on_error: true
+      data:
+        value: "{{ 100 if direction == 'charge' else 0 }}"
+      target:
+        entity_id: number.my_home_backup_reserve
+    - action: select.select_option
+      continue_on_error: true
+      data:
+        option: "{{ 'pv_only' if direction == 'charge' else 'battery_ok' }}"
+      target:
+        entity_id: select.my_home_allow_export
+    - action: select.select_option
+      continue_on_error: true
+      data:
+        option: autonomous
+      target:
+        entity_id: select.my_home_operation_mode
+    - delay:
+        minutes: 3
+    - if:
+        - condition: template
+          value_template: >-
+            {{ (states('sensor.powerwall_battery_power') | float(0) > -2) if direction == 'charge'
+               else (states('sensor.powerwall_site_power') | float(0) > -1) }}
+      then:
+        - action: select.select_option
+          continue_on_error: true
+          data:
+            option: self_consumption
+          target:
+            entity_id: select.my_home_operation_mode
+        - delay:
+            seconds: 45
+        - action: select.select_option
+          continue_on_error: true
+          data:
+            option: autonomous
+          target:
+            entity_id: select.my_home_operation_mode
+        - action: notify.send_message
+          continue_on_error: true
+          data:
+            title: "Powerwall watchdog: kickstart nudge executed"
+            message: >-
+              Force {{ direction }} was not confirmed after 3 minutes.
+              Toggled Self-Powered -> 45s -> Time-Based Control to wake up
+              the gateway.
+          target:
+            entity_id: notify.my_phone
+  mode: restart

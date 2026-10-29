@@ -1,0 +1,152 @@
+{
+  "break_even_cost_to_charge": 0,
+  "mode": "time_of_use",
+  "tariff_content_v2": {
+    "code": "SAMPLE-NORMAL-OVERNIGHT",
+    "currency": "GBP",
+    "daily_charges": [
+      {
+        "amount": 0,
+        "name": "Charge"
+      }
+    ],
+    "demand_charges": {
+      "ALL": {
+        "rates": {
+          "ALL": 0
+        }
+      }
+    },
+    "energy_charges": {
+      "ALL": {
+        "rates": {
+          "ALL": 0
+        }
+      },
+      "AllYear": {
+        "rates": {
+          "OFF_PEAK": 0.07,
+          "ON_PEAK": 0.3
+        }
+      }
+    },
+    "name": "Example: Normal Overnight Tariff - REPLACE ME",
+    "seasons": {
+      "AllYear": {
+        "fromDay": 1,
+        "fromMonth": 1,
+        "toDay": 31,
+        "toMonth": 12,
+        "tou_periods": {
+          "OFF_PEAK": {
+            "periods": [
+              {
+                "fromDayOfWeek": 0,
+                "fromHour": 23,
+                "fromMinute": 30,
+                "toDayOfWeek": 6,
+                "toHour": 0,
+                "toMinute": 0
+              },
+              {
+                "fromDayOfWeek": 0,
+                "fromHour": 0,
+                "fromMinute": 0,
+                "toDayOfWeek": 6,
+                "toHour": 5,
+                "toMinute": 15
+              }
+            ]
+          },
+          "ON_PEAK": {
+            "periods": [
+              {
+                "fromDayOfWeek": 0,
+                "fromHour": 5,
+                "fromMinute": 15,
+                "toDayOfWeek": 6,
+                "toHour": 23,
+                "toMinute": 30
+              }
+            ]
+          }
+        }
+      }
+    },
+    "sell_tariff": {
+      "currency": "GBP",
+      "daily_charges": [
+        {
+          "amount": 0,
+          "name": "Charge"
+        }
+      ],
+      "demand_charges": {
+        "ALL": {
+          "rates": {
+            "ALL": 0
+          }
+        }
+      },
+      "energy_charges": {
+        "ALL": {
+          "rates": {
+            "ALL": 0
+          }
+        },
+        "AllYear": {
+          "rates": {
+            "OFF_PEAK": 0.15,
+            "ON_PEAK": 0.15
+          }
+        }
+      },
+      "name": "Example: Normal Overnight Tariff - REPLACE ME",
+      "seasons": {
+        "AllYear": {
+          "fromDay": 1,
+          "fromMonth": 1,
+          "toDay": 31,
+          "toMonth": 12,
+          "tou_periods": {
+            "OFF_PEAK": {
+              "periods": [
+                {
+                  "fromDayOfWeek": 0,
+                  "fromHour": 23,
+                  "fromMinute": 30,
+                  "toDayOfWeek": 6,
+                  "toHour": 0,
+                  "toMinute": 0
+                },
+                {
+                  "fromDayOfWeek": 0,
+                  "fromHour": 0,
+                  "fromMinute": 0,
+                  "toDayOfWeek": 6,
+                  "toHour": 5,
+                  "toMinute": 15
+                }
+              ]
+            },
+            "ON_PEAK": {
+              "periods": [
+                {
+                  "fromDayOfWeek": 0,
+                  "fromHour": 5,
+                  "fromMinute": 15,
+                  "toDayOfWeek": 6,
+                  "toHour": 23,
+                  "toMinute": 30
+                }
+              ]
+            }
+          }
+        }
+      },
+      "utility": "Your Supplier"
+    },
+    "utility": "Your Supplier",
+    "version": 1
+  }
+}

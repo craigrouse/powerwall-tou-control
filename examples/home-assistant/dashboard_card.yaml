@@ -1,0 +1,23 @@
+# Powerwall TOU control — a simple dashboard card for the helpers in
+# helpers.yaml. Paste this into a dashboard view in YAML mode, or
+# recreate it with the UI card editor.
+
+type: vertical-stack
+cards:
+  - type: entities
+    title: Powerwall force charge/export
+    entities:
+      - entity: input_boolean.powerwall_force_charge
+        name: Force charge
+      - entity: input_boolean.powerwall_force_export
+        name: Force export
+      - entity: input_number.powerwall_force_hours
+        name: Duration (hours)
+      - entity: timer.powerwall_force_timer
+        name: Time remaining
+  - type: markdown
+    content: >-
+      Turning **Force charge** or **Force export** on pushes a fake tariff
+      and holds it for the chosen duration, then restores your normal
+      tariff automatically. See docs/03-recipes.md and
+      docs/05-lessons-learned.md before leaving this unattended.

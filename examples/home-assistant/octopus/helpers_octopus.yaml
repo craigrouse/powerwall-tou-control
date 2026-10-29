@@ -1,0 +1,17 @@
+# Additional helpers used only by the Octopus examples in this folder.
+# These are separate from examples/home-assistant/helpers.yaml, which
+# covers the core (non-Octopus) force-charge/export examples.
+
+input_boolean:
+  octopus_saving_session_active:
+    name: Octopus Saving Session active
+    icon: mdi:cash-clock
+
+input_number:
+  octopus_agile_cheap_threshold:
+    name: Octopus Agile cheap-rate threshold
+    min: -20
+    max: 50
+    step: 0.5
+    unit_of_measurement: p/kWh
+    icon: mdi:cash

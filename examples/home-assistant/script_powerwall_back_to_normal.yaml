@@ -1,0 +1,177 @@
+# Powerwall TOU control — "back to normal" script (Recipe 4, docs/03-recipes.md).
+#
+# IMPORTANT: the tariff below is a SAMPLE, not your real tariff. It's a
+# UK-style overnight-cheap shape (off-peak 23:30-05:30, day rate otherwise,
+# flat export price) purely so this file is runnable and shows the right
+# JSON shape. You MUST replace the rates, times, and 'utility'/'currency'
+# with your own real tariff before using this for anything real — pushing
+# this sample tariff as if it were your actual one will make the Powerwall
+# plan against prices that aren't real.
+#
+# Notice the off-peak window below is pushed as ending at 05:15, not the
+# real 05:30. This is deliberate — see "The gateway can overrun a cheap
+# window" in docs/05-lessons-learned.md. The gateway can finish a charge
+# plan with a full-power sprint that overruns the end of a cheap window,
+# so the pushed version of a real overnight-cheap tariff is often given a
+# window that closes slightly early, to keep any sprint inside the
+# genuinely cheap period.
+#
+# ADAPT BEFORE USE: device id, entity ids (see docs/04-home-assistant-setup.md
+# for the rename table), and all rate/time values below.
+#
+# The three fields default to a conservative "everything off" normal
+# state. Most households running their Powerwall in Time-Based Control
+# day to day will actually want grid_charging_allowed set to 'on' here,
+# so the Powerwall can keep charging overnight under your REAL tariff —
+# the 'off' default below is deliberately cautious for a repo that's
+# public and untested on your system. Set it to match whatever your
+# Powerwall normally does when you're not forcing anything.
+
+powerwall_back_to_normal:
+  alias: "Powerwall: back to normal"
+  description: >-
+    Pushes a sample normal tariff and restores normal reserve / grid
+    charging / export rule / mode, in the tariff-first, mode-last order.
+    Replace the tariff and field defaults with your own before relying on
+    this. See docs/03-recipes.md, recipe 4.
+  fields:
+    backup_reserve:
+      name: Normal backup reserve
+      description: The backup reserve (%) you normally run day to day.
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    grid_charging_allowed:
+      name: Normal grid charging setting
+      description: >-
+        Whether grid charging should normally be allowed. Many
+        Time-Based-Control setups want this 'on' so the battery can
+        charge overnight under the real off-peak rate — check what your
+        own system normally runs.
+      required: false
+      default: "off"
+      selector:
+        select:
+          options:
+            - "on"
+            - "off"
+    export_rule:
+      name: Normal export rule
+      description: >-
+        'pv_only' is the safer default for most households (only exports
+        surplus solar, never the battery itself). Only use 'battery_ok'
+        here if you specifically want the battery to export routinely and
+        you've checked your export permission/limit — see the disclaimer
+        in the README.
+      required: false
+      default: pv_only
+      selector:
+        select:
+          options:
+            - pv_only
+            - battery_ok
+  sequence:
+    # Stop a forced window that is still in its 3-minute check, so its
+    # "nudge" can't fire after we have gone back to normal.
+    - action: script.turn_off
+      target:
+        entity_id: script.powerwall_push_window
+    - action: teslemetry.time_of_use
+      continue_on_error: true
+      data:
+        device_id: YOUR_POWERWALL_DEVICE_ID
+        tou_settings: |-
+          {{ {
+            'break_even_cost_to_charge': 0,
+            'mode': 'time_of_use',
+            'tariff_content_v2': {
+              'code': 'SAMPLE-NORMAL-OVERNIGHT',
+              'currency': 'GBP',
+              'daily_charges': [{'amount': 0, 'name': 'Charge'}],
+              'demand_charges': {'ALL': {'rates': {'ALL': 0}}},
+              'energy_charges': {
+                'ALL': {'rates': {'ALL': 0}},
+                'AllYear': {'rates': {'OFF_PEAK': 0.07, 'ON_PEAK': 0.30}}
+              },
+              'name': 'Sample Normal Overnight Tariff - REPLACE ME',
+              'seasons': {
+                'AllYear': {
+                  'fromDay': 1, 'fromMonth': 1, 'toDay': 31, 'toMonth': 12,
+                  'tou_periods': {
+                    'OFF_PEAK': {'periods': [
+                      {'fromDayOfWeek': 0, 'fromHour': 23, 'fromMinute': 30, 'toDayOfWeek': 6, 'toHour': 0, 'toMinute': 0},
+                      {'fromDayOfWeek': 0, 'fromHour': 0, 'fromMinute': 0, 'toDayOfWeek': 6, 'toHour': 5, 'toMinute': 15}
+                    ]},
+                    'ON_PEAK': {'periods': [
+                      {'fromDayOfWeek': 0, 'fromHour': 5, 'fromMinute': 15, 'toDayOfWeek': 6, 'toHour': 23, 'toMinute': 30}
+                    ]}
+                  }
+                }
+              },
+              'sell_tariff': {
+                'currency': 'GBP',
+                'daily_charges': [{'amount': 0, 'name': 'Charge'}],
+                'demand_charges': {'ALL': {'rates': {'ALL': 0}}},
+                'energy_charges': {
+                  'ALL': {'rates': {'ALL': 0}},
+                  'AllYear': {'rates': {'OFF_PEAK': 0.15, 'ON_PEAK': 0.15}}
+                },
+                'name': 'Sample Normal Overnight Tariff - REPLACE ME',
+                'seasons': {
+                  'AllYear': {
+                    'fromDay': 1, 'fromMonth': 1, 'toDay': 31, 'toMonth': 12,
+                    'tou_periods': {
+                      'OFF_PEAK': {'periods': [
+                        {'fromDayOfWeek': 0, 'fromHour': 23, 'fromMinute': 30, 'toDayOfWeek': 6, 'toHour': 0, 'toMinute': 0},
+                        {'fromDayOfWeek': 0, 'fromHour': 0, 'fromMinute': 0, 'toDayOfWeek': 6, 'toHour': 5, 'toMinute': 15}
+                      ]},
+                      'ON_PEAK': {'periods': [
+                        {'fromDayOfWeek': 0, 'fromHour': 5, 'fromMinute': 15, 'toDayOfWeek': 6, 'toHour': 23, 'toMinute': 30}
+                      ]}
+                    }
+                  }
+                },
+                'utility': 'Your Supplier'
+              },
+              'utility': 'Your Supplier',
+              'version': 1
+            }
+          } }}
+    - delay:
+        seconds: 15
+    - if:
+        - condition: template
+          value_template: "{{ (grid_charging_allowed | default('off')) == 'on' }}"
+      then:
+        - action: switch.turn_on
+          continue_on_error: true
+          target:
+            entity_id: switch.my_home_allow_charging_from_grid
+      else:
+        - action: switch.turn_off
+          continue_on_error: true
+          target:
+            entity_id: switch.my_home_allow_charging_from_grid
+    - action: number.set_value
+      continue_on_error: true
+      data:
+        value: "{{ backup_reserve | default(20) }}"
+      target:
+        entity_id: number.my_home_backup_reserve
+    - action: select.select_option
+      continue_on_error: true
+      data:
+        option: "{{ export_rule | default('pv_only') }}"
+      target:
+        entity_id: select.my_home_allow_export
+    - action: select.select_option
+      continue_on_error: true
+      data:
+        option: autonomous
+      target:
+        entity_id: select.my_home_operation_mode
+  mode: restart

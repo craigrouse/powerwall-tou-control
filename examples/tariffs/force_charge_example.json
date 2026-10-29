@@ -1,0 +1,152 @@
+{
+  "break_even_cost_to_charge": 0,
+  "mode": "time_of_use",
+  "tariff_content_v2": {
+    "code": "FORCE-CHARGE-ISOLATED-SPIKE",
+    "currency": "GBP",
+    "daily_charges": [
+      {
+        "amount": 0,
+        "name": "Charge"
+      }
+    ],
+    "demand_charges": {
+      "ALL": {
+        "rates": {
+          "ALL": 0
+        }
+      }
+    },
+    "energy_charges": {
+      "ALL": {
+        "rates": {
+          "ALL": 0
+        }
+      },
+      "AllYear": {
+        "rates": {
+          "OFF_PEAK": 0.0,
+          "ON_PEAK": 1.5
+        }
+      }
+    },
+    "name": "Example: Force Charge 02:00-04:00",
+    "seasons": {
+      "AllYear": {
+        "fromDay": 1,
+        "fromMonth": 1,
+        "toDay": 31,
+        "toMonth": 12,
+        "tou_periods": {
+          "OFF_PEAK": {
+            "periods": [
+              {
+                "fromDayOfWeek": 0,
+                "fromHour": 2,
+                "fromMinute": 0,
+                "toDayOfWeek": 6,
+                "toHour": 4,
+                "toMinute": 0
+              }
+            ]
+          },
+          "ON_PEAK": {
+            "periods": [
+              {
+                "fromDayOfWeek": 0,
+                "fromHour": 0,
+                "fromMinute": 0,
+                "toDayOfWeek": 6,
+                "toHour": 2,
+                "toMinute": 0
+              },
+              {
+                "fromDayOfWeek": 0,
+                "fromHour": 4,
+                "fromMinute": 0,
+                "toDayOfWeek": 6,
+                "toHour": 0,
+                "toMinute": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    "sell_tariff": {
+      "currency": "GBP",
+      "daily_charges": [
+        {
+          "amount": 0,
+          "name": "Charge"
+        }
+      ],
+      "demand_charges": {
+        "ALL": {
+          "rates": {
+            "ALL": 0
+          }
+        }
+      },
+      "energy_charges": {
+        "ALL": {
+          "rates": {
+            "ALL": 0
+          }
+        },
+        "AllYear": {
+          "rates": {
+            "OFF_PEAK": 0.0,
+            "ON_PEAK": 0.0
+          }
+        }
+      },
+      "name": "Example: Force Charge 02:00-04:00",
+      "seasons": {
+        "AllYear": {
+          "fromDay": 1,
+          "fromMonth": 1,
+          "toDay": 31,
+          "toMonth": 12,
+          "tou_periods": {
+            "OFF_PEAK": {
+              "periods": [
+                {
+                  "fromDayOfWeek": 0,
+                  "fromHour": 2,
+                  "fromMinute": 0,
+                  "toDayOfWeek": 6,
+                  "toHour": 4,
+                  "toMinute": 0
+                }
+              ]
+            },
+            "ON_PEAK": {
+              "periods": [
+                {
+                  "fromDayOfWeek": 0,
+                  "fromHour": 0,
+                  "fromMinute": 0,
+                  "toDayOfWeek": 6,
+                  "toHour": 2,
+                  "toMinute": 0
+                },
+                {
+                  "fromDayOfWeek": 0,
+                  "fromHour": 4,
+                  "fromMinute": 0,
+                  "toDayOfWeek": 6,
+                  "toHour": 0,
+                  "toMinute": 0
+                }
+              ]
+            }
+          }
+        }
+      },
+      "utility": "Your Supplier"
+    },
+    "utility": "Your Supplier",
+    "version": 1
+  }
+}

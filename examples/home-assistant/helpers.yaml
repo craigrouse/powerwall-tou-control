@@ -1,0 +1,30 @@
+# Powerwall TOU control — helper definitions (YAML mode).
+#
+# These are the helpers the example automations and scripts in this
+# directory expect. If you manage helpers through the UI instead of YAML
+# mode, create the same four helpers there with matching entity ids.
+#
+# Replace nothing here — these names are used as-is by the other examples.
+# If you rename them, update the other files to match.
+
+input_boolean:
+  powerwall_force_charge:
+    name: Powerwall force charge
+    icon: mdi:battery-charging
+
+  powerwall_force_export:
+    name: Powerwall force export
+    icon: mdi:transmission-tower-export
+
+input_number:
+  powerwall_force_hours:
+    name: Powerwall force duration (hours)
+    min: 0.5
+    max: 6
+    step: 0.5
+    unit_of_measurement: h
+    icon: mdi:timer-outline
+
+timer:
+  powerwall_force_timer:
+    name: Powerwall force window timer

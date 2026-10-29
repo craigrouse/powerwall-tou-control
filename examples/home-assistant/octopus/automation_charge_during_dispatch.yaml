@@ -1,0 +1,64 @@
+# Octopus: force-charge the Powerwall during an Intelligent Octopus Go
+# smart-charging dispatch. See docs/07-octopus-integration.md, section 1.
+#
+# ADAPT BEFORE USE:
+#   - binary_sensor.octopus_energy_YOUR_DEVICE_intelligent_dispatching:
+#     replace YOUR_DEVICE with your own Intelligent device identifier
+#     (Settings -> Devices & Services -> Entities, filter "dispatching").
+#   - input_boolean.octopus_saving_session_active: this is a stand-in for
+#     however you track "a paid Saving Session is running right now" (see
+#     automation_saving_session_export.yaml in this folder, or your own
+#     binary_sensor). The guard exists so a dispatch starting mid-session
+#     can't clobber a forced export that's already running.
+#   - The `hours: 6` below is a safe upper bound (an overnight off-peak
+#     window can be 6 hours), not a real plan — this
+#     automation relies on the dispatch turning off to end the window via
+#     back_to_normal, not on the push_window script's own timer.
+
+alias: "Powerwall: force charge during Octopus dispatch"
+description: >-
+  Starts a forced grid charge when an Intelligent Octopus Go dispatch
+  begins (whole-house cheap rate), and restores normal settings when the
+  dispatch ends. Does nothing if a Saving Session is currently in charge
+  of the tariff.
+triggers:
+  - trigger: state
+    entity_id:
+      - binary_sensor.octopus_energy_YOUR_DEVICE_intelligent_dispatching
+    to: "on"
+    id: dispatch_start
+  - trigger: state
+    entity_id:
+      - binary_sensor.octopus_energy_YOUR_DEVICE_intelligent_dispatching
+    to: "off"
+    id: dispatch_end
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - dispatch_start
+          - condition: state
+            entity_id: input_boolean.octopus_saving_session_active
+            state: "off"
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_push_window
+            data:
+              variables:
+                direction: charge
+                hours: 6
+      - conditions:
+          - condition: trigger
+            id:
+              - dispatch_end
+          - condition: state
+            entity_id: input_boolean.octopus_saving_session_active
+            state: "off"
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_back_to_normal
+mode: restart

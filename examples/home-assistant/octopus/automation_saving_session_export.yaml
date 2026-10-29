@@ -1,0 +1,114 @@
+# Octopus: force-export the Powerwall during a paid Saving Session
+# (Octoplus "Power Down"). See docs/07-octopus-integration.md, section 2.
+#
+# UNTESTED SIMPLIFICATION: the 3-minute re-check here runs as a separate
+# time_pattern trigger gated by a boolean, which is a simpler pattern than
+# the source system's own re-assert loop. It has not been proven over as
+# many real sessions as the working source automations this repo is
+# otherwise drawn from — watch your first few sessions closely, and see
+# docs/05-lessons-learned.md ("Never trust a pushed setting") for why the
+# re-check matters at all.
+#
+# ADAPT BEFORE USE:
+#   - calendar.octopus_energy_YOUR_ACCOUNT_octoplus_power_down: replace
+#     YOUR_ACCOUNT with your own account identifier.
+#   - input_boolean.octopus_saving_session_active: create this helper (or
+#     reuse one you already have) — it's what gates the 3-minute re-check
+#     to only run while a session is actually in progress.
+#   - notify.my_phone: your own notify target.
+
+alias: "Powerwall: force export for Octopus Saving Session"
+description: >-
+  Starts a forced export 5 minutes before a paid Saving Session begins
+  (the calendar trigger offset), sized to run for the length of the
+  session, re-checks grid power every 3 minutes while the session is
+  active and nudges if export looks stalled, then restores normal
+  settings when the session ends.
+triggers:
+  - trigger: calendar
+    entity_id: calendar.octopus_energy_YOUR_ACCOUNT_octoplus_power_down
+    event: start
+    offset: "-00:05:00"
+    id: session_start
+  - trigger: calendar
+    entity_id: calendar.octopus_energy_YOUR_ACCOUNT_octoplus_power_down
+    event: end
+    id: session_end
+  - trigger: time_pattern
+    minutes: "/3"
+    id: recheck
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - session_start
+        sequence:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.octopus_saving_session_active
+          - variables:
+              # Trigger fires 5 min BEFORE the session's real start (the
+              # calendar offset), so "now" to the event's end IS the full
+              # window we need to force export for, early start included.
+              session_minutes: >-
+                {{ ((as_timestamp(trigger.calendar_event.end) - as_timestamp(now())) / 60) | round(0, 'ceil') }}
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_push_window
+            data:
+              variables:
+                direction: export
+                minutes: "{{ session_minutes }}"
+      - conditions:
+          - condition: trigger
+            id:
+              - session_end
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_back_to_normal
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.octopus_saving_session_active
+      - conditions:
+          - condition: trigger
+            id:
+              - recheck
+          - condition: state
+            entity_id: input_boolean.octopus_saving_session_active
+            state: "on"
+            # Give the gateway its 3-4 minutes to react before judging it.
+            for: "00:05:00"
+        sequence:
+          - if:
+              - condition: numeric_state
+                entity_id: sensor.powerwall_site_power
+                above: -1
+            then:
+              - action: select.select_option
+                continue_on_error: true
+                data:
+                  option: self_consumption
+                target:
+                  entity_id: select.my_home_operation_mode
+              - delay:
+                  seconds: 45
+              - action: select.select_option
+                continue_on_error: true
+                data:
+                  option: autonomous
+                target:
+                  entity_id: select.my_home_operation_mode
+              - action: notify.send_message
+                continue_on_error: true
+                data:
+                  title: "Powerwall watchdog: Saving Session nudge"
+                  message: >-
+                    Grid export still looked stalled 3-minute check into
+                    a Saving Session. Toggled Self-Powered -> 45s ->
+                    Time-Based Control.
+                target:
+                  entity_id: notify.my_phone
+mode: restart

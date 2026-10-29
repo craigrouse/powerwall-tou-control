@@ -1,0 +1,103 @@
+# Powerwall TOU control — the controller automation that wires the
+# helpers (examples/home-assistant/helpers.yaml) to the two scripts
+# (script_powerwall_push_window.yaml, script_powerwall_back_to_normal.yaml).
+#
+# ADAPT BEFORE USE: entity ids for the helpers, if you renamed them.
+#
+# mode: restart is used deliberately (see docs/05-lessons-learned.md,
+# "Near-simultaneous triggers") so a stop/start/timer-finish trigger
+# arriving in quick succession always leaves the automation acting on the
+# newest trigger rather than racing an older run.
+
+alias: "Powerwall: force charge/export controller"
+description: >-
+  Starts a forced charge or export when its input_boolean turns on, runs
+  for input_number.powerwall_force_hours hours (or until turned off), then
+  restores normal settings. Only one of force_charge / force_export can be
+  active at a time — turning one on turns the other off first.
+triggers:
+  - trigger: state
+    entity_id:
+      - input_boolean.powerwall_force_charge
+    to: "on"
+    id: start_charge
+  - trigger: state
+    entity_id:
+      - input_boolean.powerwall_force_export
+    to: "on"
+    id: start_export
+  - trigger: state
+    entity_id:
+      - input_boolean.powerwall_force_charge
+      - input_boolean.powerwall_force_export
+    to: "off"
+    id: stop
+  - trigger: state
+    entity_id:
+      - timer.powerwall_force_timer
+    to: idle
+    id: timer_finished
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - start_charge
+        sequence:
+          # Guard: don't allow both boolean to end up on at once.
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.powerwall_force_export
+          - action: timer.start
+            data:
+              duration: >-
+                {{ (states('input_number.powerwall_force_hours') | float(1.0) * 3600) | int }}
+            target:
+              entity_id: timer.powerwall_force_timer
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_push_window
+            data:
+              variables:
+                direction: charge
+                hours: "{{ states('input_number.powerwall_force_hours') | float(1.0) }}"
+      - conditions:
+          - condition: trigger
+            id:
+              - start_export
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.powerwall_force_charge
+          - action: timer.start
+            data:
+              duration: >-
+                {{ (states('input_number.powerwall_force_hours') | float(1.0) * 3600) | int }}
+            target:
+              entity_id: timer.powerwall_force_timer
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_push_window
+            data:
+              variables:
+                direction: export
+                hours: "{{ states('input_number.powerwall_force_hours') | float(1.0) }}"
+      - conditions:
+          - condition: trigger
+            id:
+              - stop
+              - timer_finished
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.powerwall_force_charge
+                - input_boolean.powerwall_force_export
+          - action: timer.cancel
+            target:
+              entity_id: timer.powerwall_force_timer
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_back_to_normal
+mode: restart

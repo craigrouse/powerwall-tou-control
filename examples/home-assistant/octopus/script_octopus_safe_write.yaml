@@ -1,0 +1,91 @@
+# Octopus "safe write" wrapper — generalised from a working source script.
+#
+# WHY THIS EXISTS: the Octopus Energy integration (BottlecapDave) can raise
+# its own error type on write failures (for example, when Octopus's own
+# backend is struggling around a session boundary). That error is NOT a
+# standard Home Assistant error, so a plain `continue_on_error: true` on
+# the calling action does not catch it — the calling automation aborts
+# instead. See docs/07-octopus-integration.md.
+#
+# HOW TO USE: callers invoke this with `script.turn_on` and `variables`
+# (fire-and-forget) rather than calling it directly and waiting, so a
+# failure in here can never abort the caller. The caller should read the
+# target entity back a short while afterwards to confirm the write landed.
+#
+# mode: queued is deliberate — see "Target and ready-by writes are
+# read-modify-write" in docs/07-octopus-integration.md. Two writes to the
+# same kind of Octopus setting (e.g. charge target and ready-by) running
+# at once can each read the same starting state and the one that finishes
+# last silently wins, reverting the other. Running this script queued
+# rather than parallel serialises writes so they can't race each other.
+
+octopus_safe_write:
+  alias: "Octopus: safe write"
+  description: >-
+    Fire-and-forget wrapper for Octopus Energy writes (switch/number/select)
+    so a Kraken-side failure can't abort the caller. Fields: kind
+    (switch_on | switch_off | number | select), entity_id (string or
+    list), value (number or option, as needed).
+  mode: queued
+  max: 20
+  fields:
+    kind:
+      name: Kind
+      description: switch_on | switch_off | number | select
+      required: true
+      selector:
+        select:
+          options:
+            - switch_on
+            - switch_off
+            - number
+            - select
+    entity_id:
+      name: Entity id(s)
+      description: Octopus entity id, or a list of them
+      required: true
+      selector:
+        text: {}
+    value:
+      name: Value
+      description: Number value, or select option — as required by 'kind'
+      required: false
+      selector:
+        text: {}
+  sequence:
+    - repeat:
+        for_each: "{{ entity_id if entity_id is list else [entity_id] }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ kind == 'switch_on' }}"
+                sequence:
+                  - action: switch.turn_on
+                    target:
+                      entity_id: "{{ repeat.item }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ kind == 'switch_off' }}"
+                sequence:
+                  - action: switch.turn_off
+                    target:
+                      entity_id: "{{ repeat.item }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ kind == 'number' }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: "{{ repeat.item }}"
+                    data:
+                      value: "{{ value }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ kind == 'select' }}"
+                sequence:
+                  - action: select.select_option
+                    target:
+                      entity_id: "{{ repeat.item }}"
+                    data:
+                      option: "{{ value }}"

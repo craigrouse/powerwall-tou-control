@@ -1,0 +1,73 @@
+# UNTESTED SUGGESTION — this pattern has not been run on the source
+# system this repo is drawn from. It's a reasonable starting point for an
+# Agile-style (half-hourly variable rate) tariff, not a proven recipe.
+# See docs/07-octopus-integration.md, section 4.
+#
+# Force-charges the Powerwall whenever the current unit rate drops below
+# a threshold you choose, and restores normal settings when it rises
+# back above it.
+#
+# ADAPT BEFORE USE:
+#   - sensor.octopus_energy_electricity_YOUR_METER_current_rate: replace
+#     YOUR_METER with your own meter identifier.
+#   - input_number.octopus_agile_cheap_threshold: create this helper
+#     yourself (a plain number in your currency's minor or major unit,
+#     matching whatever unit your rate sensor uses) and set it to
+#     whatever you consider "cheap" on your tariff.
+#
+# LIMITATIONS, read before relying on this:
+#   - The `for: 5m` on both triggers is a debounce, so a rate that
+#     hovers right at your threshold doesn't flap the Powerwall in and
+#     out of a forced charge every time it crosses the line. Without
+#     this, a wobbling rate could trigger far more TOU pushes than the
+#     Tesla rate limit allows — see docs/05-lessons-learned.md,
+#     "Tesla rate-limits commands".
+#   - This pushes a single one-hour forced window each time the rate
+#     drops below the threshold. If the cheap period runs longer than an
+#     hour, the pushed tariff's own window will end before the real cheap
+#     period does, and the Powerwall will stop treating "now" as cheap
+#     even though your real tariff still is. Re-pushing a fresh window
+#     on a timer would fix that, but doing so often enough to track every
+#     slot risks the same rate limit — this example deliberately keeps it
+#     simple rather than solving that trade-off for you.
+
+alias: "Powerwall: force charge on cheap Agile rate (untested suggestion)"
+description: >-
+  Forces a charge while the current Octopus Agile rate is below your
+  chosen threshold, and restores normal settings once it rises back
+  above it. See the limitations in this file's header comment.
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.octopus_energy_electricity_YOUR_METER_current_rate
+    below: input_number.octopus_agile_cheap_threshold
+    for: "00:05:00"
+    id: cheap
+  - trigger: numeric_state
+    entity_id: sensor.octopus_energy_electricity_YOUR_METER_current_rate
+    above: input_number.octopus_agile_cheap_threshold
+    for: "00:05:00"
+    id: not_cheap
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - cheap
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_push_window
+            data:
+              variables:
+                direction: charge
+                hours: 1
+      - conditions:
+          - condition: trigger
+            id:
+              - not_cheap
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.powerwall_back_to_normal
+mode: restart
